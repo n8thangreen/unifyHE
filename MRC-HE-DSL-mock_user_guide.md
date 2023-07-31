@@ -32,7 +32,7 @@ We first define the logistic regression model by defining which package or syste
 ```r
 stat_mod <- logistic_reg(data) %>%
   set_engine("glm", ...) %>% # alternatives: stan, BUGS, ...
-  generate_parameters(icd04 = sum(predict(data, type = "response") > 0.04),
+  generate_quantities(icd04 = sum(predict(data, type = "response") > 0.04),
                       icd06 = sum(predict(data, type = "response") > 0.06))
                              # this is like the generated parameters block in Stan code
                              # we'll need to transform the posteriors into what the simulation
@@ -46,33 +46,30 @@ If *Stan* is used as the engine, we can define the model as follows:
 ## Alternatively: read from txt file
 stan_mod <- "
 data {
-
   int<lower=0> N;
-
   vector[N] x;
-
   int<lower=0,upper=1> y[N];
-
 }
 
 parameters {
-
   real alpha;
-
   real beta;
-
 }
 
 model {
-
   y ~ bernoulli_logit(alpha + beta * x);
-
 }
 
-generated_parameters {
+generated_quantities {
+    real pred;
     real p04;
-    p04 = bernoulli_logit_rng(alpha + beta * x);
+    real p06;
+    real icd04;
+    real icd06;
+
+    pred = bernoulli_logit_rng(alpha + beta * x);
     icd04 = sum(p04 > 0.04);
+    icd06 = sum(p04 > 0.06);
 }
 "
 
@@ -86,6 +83,7 @@ Set up the base structure of the Markov model.
 
 ```r
 markov_mod <- markov_model() %>%
+  set_init_pop("init_pop") %>%
   set_states(...) %>%
   set_transition_probs(...)
 ```
@@ -115,8 +113,8 @@ First we define the workflow
 ```r
 he_workflow <- workflow() %>%
   add_model(stat_mod) %>%
-  set_scenarios(thresholds = c(icd04, icd06)) %>%   # these are the input parameters that are different between scenarios
-                                                    # because stat_mod could return others, like transition probs
+  set_scenarios(init_pop = c(icd04, icd06)) %>%   # these are the input parameters that are different between scenarios
+                                                  # because stat_mod could return others, like transition probs
   add_simulation(model = markov_mod, params = sim_params)
 ```
 
@@ -126,6 +124,8 @@ Then we can run the workflow on the input data
 he_result <- he_workflow %>%
   run_simulation(data = input_data)
 ```
+
+NG: can we cache runs so that the inference doesnt have to be rerun?
 
 ## Visualise results
 
