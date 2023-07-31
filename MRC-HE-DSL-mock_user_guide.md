@@ -5,14 +5,14 @@ Taking inspiration from [tidymodels workflows](https://workflows.tidymodels.org/
 ## Workflow steps
 
 1. Fit (logistic) regression model using raw study data
-    - Use model predictions (`[0, 1]`, probabilities) to stratify data according to different *risk thresholds*, e.g. `> 5%`, `> 6%`, ...
+    - Use model predictions (`[0, 1]`, probabilities) to stratify data according to different *risk thresholds*, e.g. `> 5%`, `> 6%`, .... Actually in this case it the initial state occupancy probabilities/distribution.
     - Model fitting can be done with base R, Stan, BUGS or other external software
 
 2. Create Markov model
     - Defines states and transition probabilities of all possible health states a patient can be in
-    - Parameter values are usually derived from inference or literature
+    - Parameter values are usually derived from inference (i.e. Step 1) or literature
 
-3. Stratifications from **1.** are used as *starting state populations* in the Markov model defined by **2.**
+3. Stratifications from **1.** are used for a given total population size to produce *starting state subpopulations* in the Markov model defined by **2.**
     - Simulate Markov model for each *scenario/stratification*
 
 ## Defining the workflow
@@ -25,16 +25,22 @@ library(unifyHE)
 
 *Note:* taken from [Getting Started • workflows](https://workflows.tidymodels.org/articles/extras/getting-started.html)
 
-We first define the logistic regression model by defining which package or system we want to use to fit the model. For simple cases we can use the base R `glm` implementation, or we can use external software packages such as *stan* or *BUGS* for more advanced cases.
+We first define the logistic regression model by defining which package or system we want to use to fit the model. For simple cases such as this we can use the base R `glm` implementation, or we can use external software packages such as *Stan* or *BUGS* for more advanced cases.
 
-> This showcases how the `unifyHE` package could interface with external tools such as stan using a simple interface. The `...` argument is used to pass parameters to the external software.
+> This showcases how the `unifyHE` package could interface with external tools such as Stan using a simple interface. The `...` argument is used to pass parameters to the external software.
 
 ```r
-logit_mod <- logistic_reg() %>%
-  set_engine("glm", ...) # alternatives: stan, BUGS, ...
+stat_mod <- logistic_reg(data) %>%
+  set_engine("glm", ...) %>% # alternatives: stan, BUGS, ...
+  generate_parameters(icd04 = sum(predict(data, type = "response") > 0.04),
+                      icd06 = sum(predict(data, type = "response") > 0.06))
+                             # this is like the generated parameters block in Stan code
+                             # we'll need to transform the posteriors into what the simulation
+                             # model needs as input, in this case the starting state probs
+                             ##TODO: should this be R style or Stan code?
 ```
 
-If *stan* is used as the engine, we can define the model as follows:
+If *Stan* is used as the engine, we can define the model as follows:
 
 ```r
 ## Alternatively: read from txt file
@@ -61,6 +67,12 @@ model {
 
   y ~ bernoulli_logit(alpha + beta * x);
 
+}
+
+generated_parameters {
+    real p04;
+    p04 = bernoulli_logit_rng(alpha + beta * x);
+    icd04 = sum(p04 > 0.04);
 }
 "
 
@@ -101,9 +113,10 @@ sim_params <- list(t_max = 30, n_sim = 1000)
 First we define the workflow
 
 ```r
-he_workflow <- worfklow() %>%
-  add_model(logit_mod) %>%
-  set_scenarios(thresholds = c(0.04, 0.06)) %>%
+he_workflow <- workflow() %>%
+  add_model(stat_mod) %>%
+  set_scenarios(thresholds = c(icd04, icd06)) %>%   # these are the input parameters that are different between scenarios
+                                                    # because stat_mod could return others, like transition probs
   add_simulation(model = markov_mod, params = sim_params)
 ```
 
