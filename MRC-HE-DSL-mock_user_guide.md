@@ -5,7 +5,7 @@ Taking inspiration from [tidymodels workflows](https://workflows.tidymodels.org/
 ## Workflow steps
 
 1. Fit (logistic) regression model using raw study data (statistical model)
-    - Use model predictions (`[0, 1]`, probabilities) to stratify data according to different *risk thresholds*, e.g. `> 5%`, `> 6%`, .... Actually in this case it the initial state occupancy probabilities/distribution.
+    - Use model predictions (`[0, 1]`, probabilities) to stratify data according to different *risk thresholds*, e.g. `> 5%`, `> 6%`, .... Actually in this case it the initial state occupancy probabilities/distribution. We can think of this as a very simple decision tree, which is very common in HTA and often used with other models.
     - Model fitting can be done with base R, Stan, BUGS or other external software
 
 2. Create Markov model (economic model)
@@ -41,8 +41,10 @@ use external software packages such as *Stan* or *BUGS* for more advanced cases.
 ```r
 stat_mod <- logistic_reg(data) %>%
   set_engine("glm", ...) %>% # alternatives: stan, BUGS, ...
-  generate_quantities(icd04 = sum(predict(data, type = "response") > 0.04),
-                      icd06 = sum(predict(data, type = "response") > 0.06))
+  generate_quantities(icd04 = mean(predict(data, type = "response") > 0.04)
+                      icd06 = mean(predict(data, type = "response") > 0.06)
+                      init_prop04 = c(icd04, 1 - icd04, 0,0,0)
+                      init_prop06 = c(icd06, 1 - icd06, 0,0,0)
                              # this is like the generated parameters block in Stan code
                              # we'll need to transform the posteriors into what the simulation
                              # model needs as input, in this case the starting state probs
@@ -83,8 +85,10 @@ generated_quantities {
     real icd06;
 
     pred = bernoulli_logit_rng(alpha + beta * x);
-    icd04 = sum(p04 > 0.04);
-    icd06 = sum(p04 > 0.06);
+    icd04 = mean(p04 > 0.04);
+    icd06 = mean(p04 > 0.06);
+    init_prop04 = c(icd04, 1 - icd04, 0,0,0)
+    init_prop06 = c(icd06, 1 - icd06, 0,0,0)
 }
 "
 
@@ -105,7 +109,7 @@ markov_mod <- markov_model() %>%
   # Use the previously fit statistical model to define the initial states
   set_init_pop(stat_mod) %>%
   # Alternatively, manually define the initial states
-  # set_init_pop(icd04 = ..., icd06 = ...) %>%
+  # set_init_pop(init_prop04 = ..., init_prop04 = ...) %>%
   set_states(...) %>%
   set_transition_probs(...)
 ```
@@ -125,7 +129,7 @@ Finally, we define a list of simulation parameters to run the actual simulation.
 > This could just be a simple list, or a more specialised object if needed.
 
 ```r
-sim_params <- list(t_max = 30, n_sim = 1000)
+sim_params <- list(pop = 100, t_max = 30, n_sim = 1000)
 ```
 
 ## Running the workflow
@@ -135,8 +139,8 @@ First we define the workflow
 ```r
 he_workflow <- workflow() %>%
   add_model(stat_mod) %>%
-  set_scenarios(init_pop = c(icd04, icd06)) %>%   # these are the input parameters that are different between scenarios
-                                                  # because stat_mod could return others, like transition probs
+  set_scenarios(init_pop = c(init_prop04, init_prop06)) %>%   # these are the input parameters that are different between scenarios
+                                                              # because stat_mod could return others, like transition probs
   add_simulation(model = markov_mod, params = sim_params)
 ```
 
