@@ -98,14 +98,15 @@ logit_mod_stan <- logistic_reg() %>%
 
 ### Economic model
 
-We define the Markov model using the `markov_model` function and configure the states and transtion
+We define the economic model using the `economic_mod()` function and configure the states and transtion
 probabilitiew using `unifyHE`'s helper functions.
 
+The Markov model is a commonly used model for this and can be defined using `markov_model()`. 
 The initial states are defined using the `set_init_pop` function, which can take the generated
 quanitites from the statistical model as input. Alternatively, the initial states can be manually defined.
 
 ```r
-markov_mod <- markov_model() %>%
+economic_mod <- markov_model() %>%
   # Use the previously fit statistical model to define the initial states
   set_init_pop(stat_mod) %>%
   # Alternatively, manually define the initial states
@@ -122,6 +123,9 @@ autoplot(markov_mod)
 
 > Demonstrates how we can provide visualisation tools to produce quick diagnostic plots.
 
+Alternatively, the economics model could be agent-based, microsimulation, semi-Markov, partitioned survival,
+or others. These can be defined using their respective helper functions implemented in the `unifyHE` framework.
+
 ### Simulation
 
 Finally, we define a list of simulation parameters to run the actual simulation.
@@ -132,16 +136,18 @@ Finally, we define a list of simulation parameters to run the actual simulation.
 sim_params <- list(pop = 100, t_max = 30, n_sim = 1000)
 ```
 
-## Running the workflow
+## Running the workflow and cost-effectiveness analysis
 
-First we define the workflow
+First we define the workflow by specifying the statistical and economic models, which we defined before.
+The final step is to run a *cost-effectiveness analysis*, using `cea()`.
 
 ```r
 he_workflow <- workflow() %>%
   add_model(stat_mod) %>%
   set_scenarios(init_pop = c(init_prop04, init_prop06)) %>%   # these are the input parameters that are different between scenarios
                                                               # because stat_mod could return others, like transition probs
-  add_simulation(model = markov_mod, params = sim_params)
+  add_simulation(model = economic_mod, params = sim_params) %>%
+  cea()  # cost-effectiveness analysis
 ```
 
 Then we can run the workflow on the input data
