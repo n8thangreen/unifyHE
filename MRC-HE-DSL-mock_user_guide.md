@@ -106,7 +106,8 @@ The initial states are defined using the `set_init_pop` function, which can take
 quanitites from the statistical model as input. Alternatively, the initial states can be manually defined.
 
 ```r
-economic_mod <- markov_model() %>%
+economic_mod <-
+  set_econ_model(markov_model()) %>%
   # Use the previously fit statistical model to define the initial states
   set_init_pop(stat_mod) %>%
   # Alternatively, manually define the initial states
