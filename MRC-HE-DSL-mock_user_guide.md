@@ -22,7 +22,7 @@ library(unifyHE)
 ```
 
 The `unifyHE` package allows us to define a workflow for Health Economics modeling using a simple
-interface. Generally, a workflow consists of a staticial and an economic model. The statistical
+interface. Generally, a workflow consists of a _statistical_ and an _economic_ model. The statistical
 model is used to estimate disease progression and treatment effects from individual patient data.
 The output of the statistical model is then used to parameterise the economic model, which is used
 to simulate different scenarios at the population level. Finally, the simulated outcomes from the
